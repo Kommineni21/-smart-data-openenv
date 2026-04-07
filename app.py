@@ -1,108 +1,122 @@
 import gradio as gr
 import pandas as pd
-import subprocess
 import matplotlib.pyplot as plt
 
-def run_pipeline(file):
-    if file is None:
-        return "Please upload a CSV file", None, None, None, None, None, None
+def process(file):
+    try:
+        df = pd.read_csv(file.name)
 
-    file_path = file.name
+        original_df = df.copy()
 
-    # Run inference
-    result = subprocess.run(
-        ["python", "inference.py", file_path],
-        capture_output=True,
-        text=True
-    )
+        output = " STARTING DATA CLEANING\n\n"
 
-    # Load original dataset
-    original_df = pd.read_csv(file_path)
+        # Initial info
+        output += f" Rows: {df.shape[0]}, Columns: {df.shape[1]}\n\n"
 
-    #  NOTE: If inference modifies file, reload it again here
-    cleaned_df = original_df.copy()
+        # ========================
+        # 1. Remove duplicates
+        # ========================
+        duplicates = df.duplicated().sum()
+        if duplicates > 0:
+            df = df.drop_duplicates()
+            output += f" Removed {duplicates} duplicate rows\n"
+        else:
+            output += " No duplicate rows\n"
 
-    # -----------------------------
-    # BEFORE vs AFTER SUMMARY
-    # -----------------------------
-    before_missing = original_df.isnull().sum().sum()
-    before_dup = original_df.duplicated().sum()
+        # ========================
+        # 2. Missing values
+        # ========================
+        missing_before = df.isnull().sum()
 
-    after_missing = cleaned_df.isnull().sum().sum()
-    after_dup = cleaned_df.duplicated().sum()
+        if missing_before.sum() > 0:
+            df = df.fillna(df.mean(numeric_only=True))
+            output += f" Filled missing values\n"
+        else:
+            output += "No missing values\n"
 
-    comparison = f"""
- BEFORE CLEANING:
-Missing Values: {before_missing}
-Duplicates: {before_dup}
+        # Missing values graph
+        plt.figure()
+        missing_before.plot(kind='bar')
+        plt.title("Missing Values per Column")
+        plt.xticks(rotation=45)
+        missing_plot = plt.gcf()
+        plt.close()
 
- AFTER CLEANING:
-Missing Values: {after_missing}
-Duplicates: {after_dup}
+        # ========================
+        # 3. Normalize
+        # ========================
+        num_cols = df.select_dtypes(include=['number']).columns
+
+        if len(num_cols) > 0:
+            df[num_cols] = (df[num_cols] - df[num_cols].min()) / (
+                df[num_cols].max() - df[num_cols].min()
+            )
+            output += " Normalized numeric columns\n"
+
+        # ========================
+        # 4. Outlier Detection
+        # ========================
+        outliers = {}
+        for col in num_cols:
+            Q1 = df[col].quantile(0.25)
+            Q3 = df[col].quantile(0.75)
+            IQR = Q3 - Q1
+
+            outliers[col] = ((df[col] < (Q1 - 1.5 * IQR)) |
+                             (df[col] > (Q3 + 1.5 * IQR))).sum()
+
+        output += "\n Outliers detected per column:\n"
+        for k, v in outliers.items():
+            output += f"{k}: {v}\n"
+
+        # ========================
+        # Save cleaned file
+        # ========================
+        output_file = "cleaned_output.csv"
+        df.to_csv(output_file, index=False)
+
+        # ========================
+        # Explanation
+        # ========================
+        explanation = """
+ Steps Applied:
+1. Removed duplicate rows
+2. Filled missing values using mean
+3. Normalized numeric columns
+4. Detected outliers using IQR method
 """
 
-    # -----------------------------
-    # GRAPH (FIXED)
-    # -----------------------------
-    missing = original_df.isnull().sum()
+        return output, df, missing_plot, explanation, output_file
 
-    if missing.sum() == 0:
-        fig, ax = plt.subplots()
-        ax.text(0.5, 0.5, "No Missing Values 🎉",
-                ha='center', va='center', fontsize=14)
-        ax.set_title("Missing Values")
-        ax.axis('off')
-    else:
-        fig, ax = plt.subplots()
-        missing.plot(kind="bar", ax=ax)
-        ax.set_title("Missing Values per Column")
+    except Exception as e:
+        return f" ERROR: {str(e)}", None, None, None, None
 
-    # -----------------------------
-    # SAVE CLEANED FILE
-    # -----------------------------
-    cleaned_path = "cleaned_output.csv"
-    cleaned_df.to_csv(cleaned_path, index=False)
 
-    # -----------------------------
-    # EXPLANATION
-    # -----------------------------
-    explanation = """
- Intelligent AI Decisions:
-✔ Automatically detected duplicates and removed them
-✔ Identified missing values and filled them
-✔ Detected and removed outliers using IQR method
-✔ Normalized data for ML readiness
-✔ Generated clean dataset ready for analysis
-"""
+# ========================
+# UI DESIGN
+# ========================
+with gr.Blocks() as demo:
+    gr.Markdown("#  Smart Data Cleaning AI")
+    gr.Markdown("Upload any dataset → Clean → Analyze → Visualize → Download")
 
-    return (
-        result.stdout,
-        original_df,
-        cleaned_df,
-        comparison,
-        fig,
-        cleaned_path,
-        explanation
+    file_input = gr.File(label=" Upload CSV")
+
+    run_btn = gr.Button(" Run Pipeline")
+
+    output_text = gr.Textbox(label=" Pipeline Output", lines=12)
+
+    output_df = gr.Dataframe(label=" Cleaned Dataset")
+
+    plot = gr.Plot(label="Missing Values Chart")
+
+    explanation = gr.Textbox(label=" Explanation")
+
+    download = gr.File(label=" Download Cleaned CSV")
+
+    run_btn.click(
+        fn=process,
+        inputs=file_input,
+        outputs=[output_text, output_df, plot, explanation, download]
     )
 
-
-# -----------------------------
-# GRADIO UI
-# -----------------------------
-iface = gr.Interface(
-    fn=run_pipeline,
-    inputs=gr.File(label="Upload CSV File"),
-    outputs=[
-        gr.Textbox(label="Pipeline Output"),
-        gr.Dataframe(label="Original Dataset"),
-        gr.Dataframe(label="Cleaned Dataset"),
-        gr.Textbox(label="Before vs After"),
-        gr.Plot(label="Missing Values"),
-        gr.File(label="Download Cleaned CSV"),
-        gr.Textbox(label="Explanation")
-    ],
-    title="Automated Data Cleaning & Analysis System",
-    description="Upload any dataset → Automatically clean, analyze, visualize, and download results in seconds."
-)
-
-iface.launch()
+demo.launch()
