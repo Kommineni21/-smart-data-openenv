@@ -1,4 +1,7 @@
-gradio
+openenv-core @ git+https://github.com/meta-pytorch/OpenEnv.git
+fastapi
+uvicorn
+pydantic
 pandas
 numpy
-matplotlib==3.8.4
+scikit-learn
