@@ -1,0 +1,17 @@
+[project]
+name = "smart-data-openenv"
+version = "0.1.0"
+description = "AI-powered smart data cleaning environment"
+authors = [
+    { name = "Your Name" }
+]
+dependencies = [
+    "pandas",
+    "fastapi",
+    "uvicorn",
+    "pydantic"
+]
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
