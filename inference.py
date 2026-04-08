@@ -1,27 +1,38 @@
 import requests
+import time
 
 BASE_URL = "https://purandhareswari-k-smart-data-openenv.hf.space"
 
 def run():
-    print("[START] task=data-clean env=smart-data model=baseline")
+    try:
+        # Step 1: Reset environment
+        res = requests.post(f"{BASE_URL}/reset", timeout=10)
+        data = res.json()
 
-    # Reset
-    res = requests.post(f"{BASE_URL}/reset")
-    data = res.json()
+        print("Initial State:", data)
 
-    # Step
-    action = {"action": "remove_duplicates"}
-    res = requests.post(f"{BASE_URL}/step", json=action)
-    result = res.json()
+        # Step 2: Perform actions
+        actions = ["remove_duplicates", "fill_missing", "outlier_clean"]
 
-    reward = result["reward"]
-    done = result["done"]
+        for action in actions:
+            response = requests.post(
+                f"{BASE_URL}/step",
+                json={"action": action},
+                timeout=10
+            )
+            result = response.json()
+            print(f"Action: {action}", result)
 
-    print(f"[STEP] step=1 action=remove_duplicates reward={reward:.2f} done={str(done).lower()} error=null")
+            if result.get("done", False):
+                break
 
-    success = done and reward == 1.0
+        # Step 3: Final state
+        state = requests.get(f"{BASE_URL}/state", timeout=10)
+        print("Final State:", state.json())
 
-    print(f"[END] success={str(success).lower()} steps=1 score={reward:.2f} rewards={reward:.2f}")
+    except Exception as e:
+        print({"error": str(e)})
+
 
 if __name__ == "__main__":
     run()
