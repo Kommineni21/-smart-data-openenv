@@ -1,2 +1,18 @@
-version: 1
-entrypoint: env.environment:DataCleaningEnv
+name: smart-data-openenv
+description: RL environment for data cleaning tasks
+
+actions:
+  - name: remove_duplicates
+  - name: fill_missing
+  - name: outlier_clean
+
+observation:
+  type: DataObservation
+
+tasks:
+  - name: easy
+    description: remove duplicates
+  - name: medium
+    description: fill missing values
+  - name: hard
+    description: full cleaning
