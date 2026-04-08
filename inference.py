@@ -1,37 +1,47 @@
 import requests
-import time
 
 BASE_URL = "https://purandhareswari-k-smart-data-openenv.hf.space"
 
 def run():
+    task_name = "smart_data_cleaning"
+    step_count = 0
+
     try:
-        # Step 1: Reset environment
+        # START
         res = requests.post(f"{BASE_URL}/reset", timeout=10)
         data = res.json()
 
-        print("Initial State:", data)
+        print(f"[START] task={task_name}", flush=True)
 
-        # Step 2: Perform actions
         actions = ["remove_duplicates", "fill_missing", "outlier_clean"]
 
-        for action in actions:
+        total_reward = 0
+
+        for i, action in enumerate(actions, start=1):
             response = requests.post(
                 f"{BASE_URL}/step",
                 json={"action": action},
                 timeout=10
             )
             result = response.json()
-            print(f"Action: {action}", result)
 
-            if result.get("done", False):
+            reward = result.get("reward", 0)
+            done = result.get("done", False)
+
+            total_reward += reward
+            step_count = i
+
+            print(f"[STEP] step={i} reward={reward}", flush=True)
+
+            if done:
                 break
 
-        # Step 3: Final state
-        state = requests.get(f"{BASE_URL}/state", timeout=10)
-        print("Final State:", state.json())
+        # END
+        score = total_reward
+        print(f"[END] task={task_name} score={score} steps={step_count}", flush=True)
 
     except Exception as e:
-        print({"error": str(e)})
+        print(f"[ERROR] {str(e)}", flush=True)
 
 
 if __name__ == "__main__":
