@@ -5,10 +5,12 @@ from pydantic import BaseModel
 from env.graders import grade_easy, grade_medium, grade_hard
 
 
+# -------- ACTION --------
 class DataAction(BaseModel):
     action_type: str
 
 
+# -------- OBSERVATION --------
 class DataObservation(BaseModel):
     data_summary: str
     row_count: int
@@ -20,38 +22,51 @@ class DataObservation(BaseModel):
     status_message: str = ""
 
 
+# -------- ENVIRONMENT --------
 class DataCleaningEnv:
     def __init__(self):
+        # ⚠️ DO NOT CALL reset() HERE
         self.files = ["data/easy.csv", "data/medium.csv", "data/hard.csv"]
         self.max_steps = 10
         self.df = None
         self.current_step = 0
-        self.reset()
+        self.file_path = None
 
+    # -------- SAFE STATE --------
     @property
     def state(self):
         if self.df is None:
-            return "No data loaded. Click Reset."
+            return DataObservation(
+                data_summary="No data loaded",
+                row_count=0,
+                score=0.0,
+                reward=0.0,
+                done=False,
+                episode_id="1",
+                step_count=0,
+                status_message="Click Reset"
+            )
         return self._get_obs()
 
-    # ✅ CORRECT RESET
-    def reset(self) -> DataObservation:
+    # -------- RESET --------
+    def reset(self):
         self.file_path = random.choice(self.files)
 
         try:
             self.df = pd.read_csv(self.file_path)
-        except:
+        except Exception:
+            # fallback (prevents crash)
             self.df = pd.DataFrame({
-                "age": [25, 25, np.nan, 40, 150],
-                "salary": [50000, 50000, 60000, 70000, 999999]
+                "age": [20, None, 30, 200],
+                "salary": [50000, 60000, None, 999999]
             })
 
         self.current_step = 0
 
-        return self._get_obs(message=f"Environment Reset. Loaded {self.file_path}")
+        return self._get_obs(message="Environment Reset Successful")
 
-    # ✅ CORRECT STEP
-    def step(self, action: DataAction) -> DataObservation:
+    # -------- STEP --------
+    def step(self, action: DataAction):
         self.current_step += 1
         act = action.action_type
 
@@ -84,7 +99,7 @@ class DataCleaningEnv:
 
         return self._get_obs(reward=reward, message=f"Executed {act}")
 
-    # -------- OBS --------
+    # -------- OBS BUILDER --------
     def _get_obs(self, reward=0.0, done=False, message=""):
         score = self.calculate_score(self.df)
 
@@ -126,14 +141,16 @@ class DataCleaningEnv:
 
         return reward
 
+    # -------- GRADER BONUS --------
     def apply_grader_bonus(self):
-        if "easy" in self.file_path:
+        if self.file_path and "easy" in self.file_path:
             return grade_easy(self.df) * 20
-        elif "medium" in self.file_path:
+        elif self.file_path and "medium" in self.file_path:
             return grade_medium(self.df) * 20
         else:
             return grade_hard(self.df) * 20
 
+    # -------- SCORE --------
     def calculate_score(self, df):
         total = df.size if df.size > 0 else 1
 
@@ -143,15 +160,18 @@ class DataCleaningEnv:
 
         return round(max(0, 100 * (1 - (0.5 * missing + 0.3 * dup + 0.2 * out))), 2)
 
+    # -------- OUTLIERS --------
     def count_outliers(self, df):
         count = 0
         for col in df.select_dtypes(include=[np.number]):
-            Q1, Q3 = df[col].quantile(0.25), df[col].quantile(0.75)
+            Q1 = df[col].quantile(0.25)
+            Q3 = df[col].quantile(0.75)
             IQR = Q3 - Q1
             count += ((df[col] < Q1 - 1.5 * IQR) |
                       (df[col] > Q3 + 1.5 * IQR)).sum()
         return count
 
+    # -------- ASYNC --------
     async def reset_async(self):
         return self.reset()
 
