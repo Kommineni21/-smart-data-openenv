@@ -1,83 +1,27 @@
-import pandas as pd
+import requests
 
-def process_dataset(file_path, level):
-    print(f"\n===== RUNNING {level.upper()} DATASET =====\n")
+BASE_URL = "https://purandhareswari-k-smart-data-openenv.hf.space"
 
-    df = pd.read_csv(file_path)
-    original_df = df.copy()
+def run():
+    print("[START] task=data-clean env=smart-data model=baseline")
 
-    print("Initial Dataset:")
-    print(df.head())
-    print(f"\nShape: {df.shape}")
+    # Reset
+    res = requests.post(f"{BASE_URL}/reset")
+    data = res.json()
 
-    # Remove duplicates
-    duplicates = df.duplicated().sum()
-    if duplicates > 0:
-        df = df.drop_duplicates()
-        print(f"\nRemoved {duplicates} duplicate rows")
-    else:
-        print("\nNo duplicate rows found")
+    # Step
+    action = {"action": "remove_duplicates"}
+    res = requests.post(f"{BASE_URL}/step", json=action)
+    result = res.json()
 
-    # Fill missing values
-    missing = df.isnull().sum().sum()
-    if missing > 0:
-        df = df.fillna(df.mean(numeric_only=True))
-        print(f"Filled {missing} missing values")
-    else:
-        print("No missing values found")
+    reward = result["reward"]
+    done = result["done"]
 
-    # Normalize numeric columns
-    num_cols = df.select_dtypes(include=['number']).columns
-    if len(num_cols) > 0:
-        df[num_cols] = (df[num_cols] - df[num_cols].min()) / (
-            df[num_cols].max() - df[num_cols].min()
-        )
-        print("Normalized numeric columns")
+    print(f"[STEP] step=1 action=remove_duplicates reward={reward:.2f} done={str(done).lower()} error=null")
 
-    # Outlier detection (IQR)
-    print("\nOutliers detected:")
-    outliers = {}
-    for col in num_cols:
-        Q1 = df[col].quantile(0.25)
-        Q3 = df[col].quantile(0.75)
-        IQR = Q3 - Q1
+    success = done and reward == 1.0
 
-        count = ((df[col] < (Q1 - 1.5 * IQR)) |
-                 (df[col] > (Q3 + 1.5 * IQR))).sum()
-
-        outliers[col] = count
-        print(f"{col}: {count}")
-
-    # Dataset Quality Score
-    total_cells = original_df.shape[0] * original_df.shape[1]
-
-    missing_penalty = original_df.isnull().sum().sum() / total_cells
-    duplicate_penalty = original_df.duplicated().sum() / original_df.shape[0]
-    outlier_penalty = sum(outliers.values()) / total_cells
-
-    quality_score = 100 - (
-        (missing_penalty * 40) +
-        (duplicate_penalty * 30) +
-        (outlier_penalty * 30)
-    )
-
-    quality_score = max(0, round(quality_score, 2))
-
-    print(f"\nDataset Quality Score: {quality_score}/100")
-
-    print("\nFinal Dataset Preview:")
-    print(df.head())
-
-    print("\n===== DONE =====\n")
-
-
-def run_all():
-    process_dataset("data/easy.csv", "easy")
-    process_dataset("data/medium.csv", "medium")
-    process_dataset("data/hard.csv", "hard")
-
+    print(f"[END] success={str(success).lower()} steps=1 score={reward:.2f} rewards={reward:.2f}")
 
 if __name__ == "__main__":
-    print(" STARTING PROGRAM")
-    run_all()
-    print("PROGRAM FINISHED")
+    run()
