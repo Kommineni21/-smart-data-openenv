@@ -1,111 +1,191 @@
 import pandas as pd
 import numpy as np
+import random
 from pydantic import BaseModel
-from typing import Dict, Any, Optional
+from env.graders import grade_easy, grade_medium, grade_hard
 
-# 1. Models - All required attributes for the interface
+
+# -------- MODELS --------
 class DataAction(BaseModel):
-    action_type: str 
+    action_type: str
+
 
 class DataObservation(BaseModel):
     data_summary: str
     row_count: int
     score: float
-    reward: float = 0.0      
-    done: bool = False       
-    episode_id: str = "1"    
-    step_count: int = 0      
-    status_message: str = "" 
+    reward: float = 0.0
+    done: bool = False
+    episode_id: str = "1"
+    step_count: int = 0
+    status_message: str = ""
 
-# 2. The Environment Class
+
+# -------- ENV --------
 class DataCleaningEnv:
-    def __init__(self, file_path="data/Hard.csv", task_name="Data Cleaning"):
-        self.file_path = file_path
-        self.task_name = task_name
+    def __init__(self):
+        self.files = ["data/easy.csv", "data/medium.csv", "data/hard.csv"]
+        self.max_steps = 10
         self.df = None
-        self.initial_score = 0.0
         self.current_step = 0
-        self.max_steps = 10 
+        self.file_path = None
+        self.reset()
 
+    # -------- REQUIRED FOR OPENENV UI --------
     @property
     def state(self):
         if self.df is None:
             return "No data loaded. Click Reset."
         return self._get_obs()
 
-    def calculate_score(self, df):
-        if df.empty: return 0.0
-        missing_pct = df.isnull().sum().sum() / (df.size if df.size > 0 else 1)
-        dup_pct = df.duplicated().sum() / (len(df) if len(df) > 0 else 1)
-        # Scoring logic: 60% weight on missing values, 40% on duplicates
-        score = 100 * (1 - (0.6 * missing_pct + 0.4 * dup_pct))
-        return round(max(0, score), 2)
-
+    # -------- RESET (STRICT FORMAT) --------
     def reset(self) -> DataObservation:
+        self.file_path = random.choice(self.files)
+
         try:
             self.df = pd.read_csv(self.file_path)
         except:
-            # Fallback data for demonstration
             self.df = pd.DataFrame({
-                "age": [25, 25, np.nan, 40, 150], 
-                "salary": [50000, 50000, 60000, 70000, 80000]
+                "age": [25, 25, np.nan, 40, 150],
+                "salary": [50000, 50000, 60000, 70000, 999999]
             })
-        
-        self.initial_score = self.calculate_score(self.df)
-        self.current_step = 0
-        return self._get_obs(message="Environment Reset. Target: Score 100.")
 
-    def _get_obs(self, reward: float = 0.0, done: bool = False, message: str = "") -> DataObservation:
-        current_score = self.calculate_score(self.df)
-        
-        # Smart termination logic
-        if current_score >= 100.0:
-            done = True
-            message = "Goal Reached! Data is now perfectly clean."
-        elif self.current_step >= self.max_steps:
-            done = True
-            message = "Max steps reached."
+        self.current_step = 0
+
+        score = self.calculate_score(self.df)
 
         return DataObservation(
             data_summary=self.df.head(10).to_string(),
             row_count=len(self.df),
-            score=current_score,
-            reward=reward,
-            done=done,
-            episode_id="1",
-            step_count=self.current_step,
-            status_message=message
+            score=score,
+            reward=0.0,                     # ✅ REQUIRED
+            done=False,                     # ✅ REQUIRED
+            episode_id="1",                 # ✅ REQUIRED
+            step_count=0,                   # ✅ REQUIRED
+            status_message=f"Environment Reset. Loaded {self.file_path}"
         )
 
+    # -------- STEP --------
     def step(self, action: DataAction) -> DataObservation:
         self.current_step += 1
         act = action.action_type
-        message = f"Executed {act}"
-        
+
+        valid_actions = ["remove_duplicates", "fill_missing", "outlier_clean"]
+
+        if act not in valid_actions:
+            return self._get_obs(reward=-20, message="Invalid action")
+
+        prev_df = self.df.copy()
+
+        # Apply actions
         if act == "remove_duplicates":
-            before = len(self.df)
             self.df = self.df.drop_duplicates().reset_index(drop=True)
-            message = f"Success: Removed {before - len(self.df)} duplicate rows."
-            
+
         elif act == "fill_missing":
-            nulls = self.df.isnull().sum().sum()
             for col in self.df.select_dtypes(include=[np.number]).columns:
                 self.df[col] = self.df[col].fillna(self.df[col].mean())
-            message = f"Success: Filled {nulls} missing values."
-            
-        elif act == "outlier_clean":
-            before = len(self.df)
-            for col in self.df.select_dtypes(include=[np.number]).columns:
-                Q1, Q3 = self.df[col].quantile(0.25), self.df[col].quantile(0.75)
-                IQR = Q3 - Q1
-                self.df = self.df[~((self.df[col] < (Q1 - 1.5 * IQR)) | (self.df[col] > (Q3 + 1.5 * IQR)))]
-            message = f"Success: Removed {before - len(self.df)} outlier rows."
-        
-        current_score = self.calculate_score(self.df)
-        reward = float(current_score - self.initial_score)
-        
-        return self._get_obs(reward=reward, message=message)
 
+        elif act == "outlier_clean":
+            for col in self.df.select_dtypes(include=[np.number]).columns:
+                Q1 = self.df[col].quantile(0.25)
+                Q3 = self.df[col].quantile(0.75)
+                IQR = Q3 - Q1
+                self.df = self.df[
+                    ~((self.df[col] < (Q1 - 1.5 * IQR)) |
+                      (self.df[col] > (Q3 + 1.5 * IQR)))
+                ]
+
+        # Reward
+        reward = self.compute_reward(prev_df, self.df, act)
+        reward += self.apply_grader_bonus()
+
+        return self._get_obs(reward=reward, message=f"Executed {act}")
+
+    # -------- REWARD --------
+    def compute_reward(self, prev_df, new_df, action):
+        reward = 0
+
+        prev_missing = prev_df.isnull().sum().sum()
+        prev_dup = prev_df.duplicated().sum()
+        prev_outliers = self.count_outliers(prev_df)
+
+        new_missing = new_df.isnull().sum().sum()
+        new_dup = new_df.duplicated().sum()
+        new_outliers = self.count_outliers(new_df)
+
+        reward += (prev_missing - new_missing) * 5
+        reward += (prev_dup - new_dup) * 10
+        reward += (prev_outliers - new_outliers) * 8
+
+        if prev_df.equals(new_df):
+            reward -= 15
+
+        if action == "outlier_clean":
+            reward += 5
+
+        return reward
+
+    # -------- GRADER BONUS --------
+    def apply_grader_bonus(self):
+        if "easy" in self.file_path:
+            return grade_easy(self.df) * 20
+        elif "medium" in self.file_path:
+            return grade_medium(self.df) * 20
+        else:
+            return grade_hard(self.df) * 20
+
+    # -------- SCORE --------
+    def calculate_score(self, df):
+        total_cells = df.size if df.size > 0 else 1
+
+        missing = df.isnull().sum().sum() / total_cells
+        duplicates = df.duplicated().sum() / len(df)
+        outliers = self.count_outliers(df) / total_cells
+
+        score = 100 * (1 - (0.5 * missing + 0.3 * duplicates + 0.2 * outliers))
+        return round(max(0, score), 2)
+
+    # -------- OUTLIERS --------
+    def count_outliers(self, df):
+        count = 0
+        for col in df.select_dtypes(include=[np.number]):
+            Q1 = df[col].quantile(0.25)
+            Q3 = df[col].quantile(0.75)
+            IQR = Q3 - Q1
+            count += ((df[col] < (Q1 - 1.5 * IQR)) |
+                      (df[col] > (Q3 + 1.5 * IQR))).sum()
+        return count
+
+    # -------- OBS --------
+    def _get_obs(self, reward=0.0, done=False, message=""):
+        score = self.calculate_score(self.df)
+
+        if score >= 100:
+            done = True
+            message = "Perfect dataset cleaned!"
+        elif self.current_step >= self.max_steps:
+            done = True
+            message = "Max steps reached."
+
+        status = (
+            f"Rows:{len(self.df)} | "
+            f"Missing:{self.df.isnull().sum().sum()} | "
+            f"Duplicates:{self.df.duplicated().sum()} | "
+            f"Outliers:{self.count_outliers(self.df)}"
+        )
+
+        return DataObservation(
+            data_summary=self.df.head(10).to_string(),
+            row_count=len(self.df),
+            score=score,
+            reward=reward,
+            done=done,
+            episode_id="1",                 # ✅ REQUIRED
+            step_count=self.current_step,
+            status_message=status + " | " + message
+        )
+
+    # -------- ASYNC --------
     async def reset_async(self):
         return self.reset()
 
