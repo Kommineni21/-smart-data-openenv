@@ -2,15 +2,18 @@
 name = "smart-data-openenv"
 version = "0.1.0"
 description = "AI-powered smart data cleaning environment"
-authors = [
-    { name = "Your Name" }
-]
+authors = [{ name = "Anusha,Purandhareswari" }]
+
 dependencies = [
     "pandas",
     "fastapi",
     "uvicorn",
-    "pydantic"
+    "pydantic",
+    "openenv-core>=0.2.0"
 ]
+
+[project.scripts]
+server = "server.app:app"
 
 [build-system]
 requires = ["setuptools", "wheel"]
