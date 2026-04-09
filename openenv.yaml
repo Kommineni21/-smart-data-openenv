@@ -5,28 +5,25 @@ tasks:
   - name: easy
     description: Remove duplicates from small dataset
     grader:
-      type: numeric
-      min: 0.1
-      max: 0.9
+      type: reward
+      target: 0.8
 
   - name: medium
     description: Remove duplicates from medium dataset
     grader:
-      type: numeric
-      min: 0.1
-      max: 0.9
+      type: reward
+      target: 0.8
 
   - name: hard
     description: Remove duplicates from large dataset
     grader:
-      type: numeric
-      min: 0.1
-      max: 0.9
+      type: reward
+      target: 0.8
 
 actions:
-  - remove_duplicates
-  - fill_missing
-  - outlier_clean
+  - name: remove_duplicates
+  - name: fill_missing
+  - name: outlier_clean
 
 observation:
   type: dict
