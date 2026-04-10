@@ -1,29 +1,32 @@
 name: smart-data-openenv
-description: RL environment for data cleaning
+description: Data cleaning RL environment
 
 tasks:
-  - name: easy
+  easy:
     description: Remove duplicates from small dataset
     grader:
-      type: reward
-      target: 0.8
+      type: scalar
+      min: 0.1
+      max: 0.95
 
-  - name: medium
+  medium:
     description: Remove duplicates from medium dataset
     grader:
-      type: reward
-      target: 0.8
+      type: scalar
+      min: 0.1
+      max: 0.95
 
-  - name: hard
+  hard:
     description: Remove duplicates from large dataset
     grader:
-      type: reward
-      target: 0.8
+      type: scalar
+      min: 0.1
+      max: 0.95
 
 actions:
-  - name: remove_duplicates
-  - name: fill_missing
-  - name: outlier_clean
+  - remove_duplicates
+  - fill_missing
+  - outlier_clean
 
 observation:
   type: dict
