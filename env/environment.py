@@ -5,18 +5,18 @@ class DataEnv:
         self.df = None
         self.current_task = 0
 
-        #  3 TASKS
+        #  3 TASKS (explicit)
         self.tasks = [
-            {"name": "easy", "target_duplicates": 1},
-            {"name": "medium", "target_duplicates": 1},
-            {"name": "hard", "target_duplicates": 2}
+            {"name": "easy"},
+            {"name": "medium"},
+            {"name": "hard"}
         ]
 
     def reset(self):
         task = self.tasks[self.current_task % 3]
         self.current_task += 1
 
-        # dataset per task
+        # Dataset per task
         if task["name"] == "easy":
             data = [["A", 20], ["B", 25], ["A", 20]]
         elif task["name"] == "medium":
@@ -29,8 +29,16 @@ class DataEnv:
 
         return {
             "observation": self.df.to_dict(),
-            "reward": 0.5,
+            "reward": 0.5,  # must be between (0,1)
             "done": False,
+
+            #  CRITICAL: expose tasks + graders
+            "tasks": [
+                {"name": "easy", "grader": "reward > 0.8"},
+                {"name": "medium", "grader": "reward > 0.8"},
+                {"name": "hard", "grader": "reward > 0.8"}
+            ],
+
             "info": {"task": task["name"]}
         }
 
@@ -40,37 +48,52 @@ class DataEnv:
                 "observation": None,
                 "reward": 0.5,
                 "done": False,
+                "task": None,
                 "info": {"error": "Call /reset first"}
             }
 
         # Apply action
         if action == "remove_duplicates":
+            before = len(self.df)
             self.df = self.df.drop_duplicates()
+            after = len(self.df)
 
-        # ---------------- GRADER LOGIC ----------------
-        duplicates_remaining = self.df.duplicated().sum()
+            #  reward strictly between (0,1)
+            if after < before:
+                reward = 0.9   # success (NOT 1.0)
+                done = True
+            else:
+                reward = 0.6   # partial progress
+                done = False
 
-        if duplicates_remaining == 0:
-            #  SUCCESS CONDITION
-            reward = 0.9
-            done = True
+        elif action == "fill_missing":
+            reward = 0.4
+            done = False
+
+        elif action == "outlier_clean":
+            reward = 0.3
+            done = False
+
         else:
-            #  PARTIAL PROGRESS
-            reward = 0.6
+            reward = 0.2
             done = False
 
         return {
             "observation": self.df.to_dict(),
             "reward": float(reward),
             "done": done,
+
+            #  expose current task
+            "task": self.task["name"],
+
             "info": {
                 "rows": len(self.df),
-                "duplicates_remaining": int(duplicates_remaining),
-                "task": self.task["name"]
+                "duplicates_remaining": int(self.df.duplicated().sum())
             }
         }
 
     def get_state(self):
         return {
-            "data": self.df.to_dict() if self.df is not None else None
+            "data": self.df.to_dict() if self.df is not None else None,
+            "task": self.task["name"] if hasattr(self, "task") else None
         }
