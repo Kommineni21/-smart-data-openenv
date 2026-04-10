@@ -5,18 +5,26 @@ class DataEnv:
         self.df = None
         self.current_task = 0
 
-        #  3 TASKS (explicit)
+        #  REQUIRED TASK STRUCTURE
         self.tasks = [
-            {"name": "easy"},
-            {"name": "medium"},
-            {"name": "hard"}
+            {
+                "name": "easy",
+                "grader": {"type": "scalar", "min": 0.1, "max": 0.95}
+            },
+            {
+                "name": "medium",
+                "grader": {"type": "scalar", "min": 0.1, "max": 0.95}
+            },
+            {
+                "name": "hard",
+                "grader": {"type": "scalar", "min": 0.1, "max": 0.95}
+            }
         ]
 
     def reset(self):
         task = self.tasks[self.current_task % 3]
         self.current_task += 1
 
-        # Dataset per task
         if task["name"] == "easy":
             data = [["A", 20], ["B", 25], ["A", 20]]
         elif task["name"] == "medium":
@@ -29,17 +37,15 @@ class DataEnv:
 
         return {
             "observation": self.df.to_dict(),
-            "reward": 0.5,  # must be between (0,1)
+            "reward": 0.5,
             "done": False,
 
-            #  CRITICAL: expose tasks + graders
-            "tasks": [
-                {"name": "easy", "grader": "reward > 0.8"},
-                {"name": "medium", "grader": "reward > 0.8"},
-                {"name": "hard", "grader": "reward > 0.8"}
-            ],
+            #  CRITICAL: expose tasks WITH graders
+            "tasks": self.tasks,
 
-            "info": {"task": task["name"]}
+            "info": {
+                "task": task["name"]
+            }
         }
 
     def step(self, action):
@@ -48,22 +54,20 @@ class DataEnv:
                 "observation": None,
                 "reward": 0.5,
                 "done": False,
-                "task": None,
+                "tasks": self.tasks,
                 "info": {"error": "Call /reset first"}
             }
 
-        # Apply action
         if action == "remove_duplicates":
             before = len(self.df)
             self.df = self.df.drop_duplicates()
             after = len(self.df)
 
-            #  reward strictly between (0,1)
             if after < before:
-                reward = 0.9   # success (NOT 1.0)
+                reward = 0.9   #  valid range
                 done = True
             else:
-                reward = 0.6   # partial progress
+                reward = 0.6
                 done = False
 
         elif action == "fill_missing":
@@ -83,10 +87,11 @@ class DataEnv:
             "reward": float(reward),
             "done": done,
 
-            #  expose current task
-            "task": self.task["name"],
+            #  ALWAYS include tasks
+            "tasks": self.tasks,
 
             "info": {
+                "task": self.task["name"],
                 "rows": len(self.df),
                 "duplicates_remaining": int(self.df.duplicated().sum())
             }
@@ -95,5 +100,6 @@ class DataEnv:
     def get_state(self):
         return {
             "data": self.df.to_dict() if self.df is not None else None,
-            "task": self.task["name"] if hasattr(self, "task") else None
+            "task": self.task["name"] if hasattr(self, "task") else None,
+            "tasks": self.tasks
         }
