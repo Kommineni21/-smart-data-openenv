@@ -1,26 +1,20 @@
 from fastapi import FastAPI
-from env.environment import DataEnv, DataAction
+import subprocess
 
 app = FastAPI()
-
-env = DataEnv()
-
 
 @app.get("/")
 def root():
     return {"status": "ok"}
 
+def main():
+    # Run your original app.py (DO NOT import it)
+    subprocess.run([
+        "uvicorn",
+        "app:app",
+        "--host", "0.0.0.0",
+        "--port", "7860"
+    ])
 
-@app.post("/reset")
-def reset():
-    return env.reset()
-
-
-@app.post("/step")
-def step(action: DataAction):
-    return env.step(action)
-
-
-@app.get("/state")
-def state():
-    return env.state()
+if __name__ == "__main__":
+    main()
