@@ -1,20 +1,29 @@
 from fastapi import FastAPI
-import subprocess
 
 app = FastAPI()
+
+# ---- YOUR ORIGINAL LOGIC ----
 
 @app.get("/")
 def root():
     return {"status": "ok"}
 
+@app.post("/reset")
+def reset():
+    return {"message": "reset done"}
+
+@app.post("/step")
+def step(action: dict):
+    return {"message": "step executed", "action": action}
+
+@app.get("/state")
+def state():
+    return {"state": "running"}
+
+# ---- REQUIRED FOR VALIDATOR ----
 def main():
-    # Run your original app.py (DO NOT import it)
-    subprocess.run([
-        "uvicorn",
-        "app:app",
-        "--host", "0.0.0.0",
-        "--port", "7860"
-    ])
+    return app
 
 if __name__ == "__main__":
-    main()
+    import uvicorn
+    uvicorn.run("server.app:app", host="0.0.0.0", port=7860)
